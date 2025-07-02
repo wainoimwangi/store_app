@@ -131,7 +131,7 @@ if st.session_state.authenticated:
                 issue_scheme = col5.selectbox("**Select Scheme Name**", site_names, key="issue_scheme", help="Where are materials being issued to?")
                 col1, col2 = st.columns(2)
                 issue_date = col2.date_input("Issue Date", value=datetime.today())
-                issued_to = col2.text_input("Issued To (Team Leader Name)", placeholder="Name")
+                issued_to = col2.selectbox("Issued To (Team Leader Name)", options=team, key="issued_to_select")
                 issue_records = []
                 for material in selected_materials:
                     with col1:
@@ -171,5 +171,64 @@ if st.session_state.authenticated:
                     st.warning("⚠️ Please enter quantity for at least one material.")
 
     with tab2:
-        st.dataframe(df_stock_inventory, use_container_width=True)
-        st.download_button(label="📥 Download Data", data=df_stock_inventory.to_csv(index=False), file_name="inventory.csv", mime="text/csv")
+        with st.expander("🔎 Filter Inventory Records"):
+            col1, col2, col3, col4 = st.columns(4)
+
+            materials_filter = col1.multiselect("Material", options=sorted(materials_list))
+            scheme_filter = col2.multiselect("Scheme Name", options=sorted(site_names))
+            issued_to_filter = col3.selectbox("Issued To (Team Leader)", options=sorted(team))
+            date_filter = col4.date_input("Issued/Supply Date", value=None)
+
+            filtered_df = df_stock_inventory.copy()
+
+            if materials_filter:
+                filtered_df = filtered_df[filtered_df["Materials"].isin(materials_filter)]
+            if scheme_filter:
+                filtered_df = filtered_df[filtered_df["Scheme Name"].isin(scheme_filter)]
+            if issued_to_filter:
+                filtered_df = filtered_df[filtered_df["Issued To"].str.contains(issued_to_filter, case=False, na=False)]
+            if date_filter:
+                filtered_df = filtered_df[
+                    (pd.to_datetime(filtered_df["Issue Date"], errors='coerce') == pd.to_datetime(date_filter)) |
+                    (pd.to_datetime(filtered_df["Supply Date"], errors='coerce') == pd.to_datetime(date_filter))
+                ]
+
+            # # Ensure numeric type before summing
+            filtered_df["Quantity Supplied"] = pd.to_numeric(filtered_df["Quantity Supplied"], errors='coerce').fillna(0)
+            filtered_df["Quantity Issued"] = pd.to_numeric(filtered_df["Quantity Issued"], errors='coerce').fillna(0)
+            filtered_df = filtered_df.dropna(axis=1, how='all')
+            if st.button("Preview Detailed data"):
+                st.dataframe(filtered_df, use_container_width=True)
+
+        st.markdown("### 📦 Stock Available per Item")
+
+        available_stock = (
+            filtered_df.groupby("Materials")[["Quantity Supplied", "Quantity Issued"]]
+            .sum()
+            .reset_index()
+        )
+
+        available_stock["Available Stock"] = available_stock["Quantity Supplied"] - available_stock["Quantity Issued"]
+
+        st.dataframe(available_stock[["Materials", "Quantity Supplied", "Quantity Issued", "Available Stock"]], use_container_width=True)
+
+
+
+        st.download_button(
+        label="📥 Download Filtered Data",
+        data=filtered_df.to_csv(index=False),
+        file_name="filtered_inventory.csv",
+        mime="text/csv"
+        )
+        if scheme_filter:
+            df_stock_inventory["Quantity Issued"] = pd.to_numeric(df_stock_inventory["Quantity Issued"], errors="coerce").fillna(0)
+            df_scheme = df_stock_inventory[df_stock_inventory["Scheme Name"].isin(scheme_filter)]
+                # Group by Scheme Name and Materials, and sum Quantity Issued
+            issued_summary = (
+                df_scheme.groupby(["Materials"])["Quantity Issued"]
+                .sum()
+                .reset_index()
+                .sort_values(["Materials"])
+            )
+            st.markdown("### 📦 Quantities Issued Per Material Per Scheme")
+            st.dataframe(issued_summary, use_container_width=True)
