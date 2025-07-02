@@ -76,7 +76,10 @@ if st.session_state.authenticated:
 
     with tab1:
         with st.container(border=True):
-            df_total_material = pd.read_excel("NYANDARUA MATERIALS.xlsx")
+            df_total_material = get_gsheet_connection(sheet_id="1fdcDcwTTTRE34Egr8ybWeOfbfttYbEsUMeLaHWjO4Ig", worksheet_name="Data").get_all_records()
+            df_total_material = pd.DataFrame(df_total_material)
+
+            # df_total_material = pd.read_excel("NYANDARUA MATERIALS.xlsx")
             stock_filter = df_stock_inventory.copy()
             materials_list = stock_filter["Materials"].unique()
             site_names = df_total_material["SCHEME NAME"].unique()
